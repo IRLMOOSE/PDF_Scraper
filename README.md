@@ -2,6 +2,8 @@
 <p>This script scans specified websites for PDF files, downloads them, and uploads them to a Notion database.</p>
 
 <h2>Requirements</h2>
+<p>Notion Database Key</p>
+<p>Notion API Token
 <p>Python 3.6 or higher requests bs4 notion_client tenacity</p>
 <p>You can install these packages using pip:</p>
 <code>pip install requests bs4 notion_client tenacity</code>
