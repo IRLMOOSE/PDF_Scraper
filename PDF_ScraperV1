@@ -7,9 +7,9 @@ from notion_client import Client
 from tenacity import retry, stop_after_attempt, wait_fixed
 
 # Replace this with your Notion token
-NOTION_TOKEN = "API TOKEN"
+NOTION_TOKEN = "ENTER TOKEN HERE"
 # Replace this with your Notion database URL
-NOTION_DATABASE_URL = "DATABASE KEY"
+NOTION_DATABASE_URL = "Database key here"
 
 client = Client(auth=NOTION_TOKEN)
 database_id = NOTION_DATABASE_URL.split("/")[-1]
@@ -17,6 +17,7 @@ database_id = NOTION_DATABASE_URL.split("/")[-1]
 visited = set()
 
 def log_to_file(message):
+    print(message)  # Print the message to the terminal
     with open('log.txt', 'a') as f:
         f.write(f"{time.ctime()}: {message}\n")
 
@@ -74,5 +75,5 @@ def get_pdfs_from_websites(websites):
         get_pdfs_from_url(website)
 
 # Replace this list with the websites you want to scan
-websites_to_scan = ["", ""]
+websites_to_scan = ["https://www.hellofresh.com/recipes", "https://www.hellofresh.com/recipecards"]
 get_pdfs_from_websites(websites_to_scan)
