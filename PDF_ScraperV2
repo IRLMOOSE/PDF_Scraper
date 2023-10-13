@@ -1,0 +1,105 @@
+import time
+import requests
+import os
+import PyPDF2
+import pdfreader
+from bs4 import BeautifulSoup
+from urllib.parse import urljoin, urlparse
+from notion_client import Client
+from tenacity import retry, stop_after_attempt, wait_fixed
+
+# Replace this with your Notion token
+NOTION_TOKEN = "NOTION API"
+# Replace this with your Notion database URL
+NOTION_DATABASE_URL = "DATABASE API KEY"
+
+client = Client(auth=NOTION_TOKEN)
+database_id = NOTION_DATABASE_URL.split("/")[-1]
+
+visited = set()
+
+def log_to_file(message):
+    print(message)  # Print the message to the terminal
+    with open('log.txt', 'a') as f:
+        f.write(f"{time.ctime()}: {message}\n")
+
+def convert_rich_text_to_plain_text(rich_text):
+    # This function converts rich text (HTML) to plain text
+    soup = BeautifulSoup(rich_text, "html.parser")
+    return soup.get_text()
+
+def get_pdf_info(file_path):
+    with open(file_path, 'rb') as file:
+        pdf = pdfreader.SimplePDFViewer(file)
+        num_pages = len(pdf.pages)
+        file_size = os.path.getsize(file_path)
+    return num_pages, file_size
+
+@retry(stop=stop_after_attempt(3), wait=wait_fixed(30))
+def add_to_notion(url, file):
+    try:
+        log_to_file(f"Adding {file} to Notion...")
+        num_pages, file_size = get_pdf_info(file)
+        page = client.pages.create(
+            parent={"database_id": database_id}, 
+            properties={
+                "Name": {"title": [{"text": {"content": convert_rich_text_to_plain_text(file)}}]}, 
+                "URL": {"url": url},
+                "Number of Pages": {"number": num_pages},
+                "File Size": {"number": file_size}
+            }
+        )
+        log_to_file(f"Added {file} to Notion.")
+    except Exception as e:
+        log_to_file(f"Failed to add {file} to Notion. Error: {str(e)}")
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_fixed(30))
+def download_file(url):
+    try:
+        log_to_file(f"Downloading {url}...")
+        local_filename = url.split('/')[-1]
+        with requests.get(url, stream=True) as r:
+            r.raise_for_status()
+            with open(local_filename, 'wb') as f:
+                for chunk in r.iter_content(chunk_size=8192): 
+                    f.write(chunk)
+        log_to_file(f"Downloaded {url}.")
+        return local_filename
+    except Exception as e:
+        log_to_file(f"Failed to download {url}. Error: {str(e)}")
+
+@retry(stop=stop_after_attempt(3), wait=wait_fixed(30))
+def get_pdfs_from_url(url):
+    if url in visited:
+        return
+    visited.add(url)
+    log_to_file(f"Scanning {url} for PDFs...")
+    
+    soup = BeautifulSoup(requests.get(url).content, "html.parser")
+    
+    # Check if the page has the div with property data-test-id="instructions"
+    div_with_property = soup.find("div", attrs={"data-test-id":"instructions"})
+    
+    if div_with_property is not None:
+        for link in soup.select("a[href$='.pdf']"):
+            pdf_url = urljoin(url, link['href'])
+            file = download_file(pdf_url)
+            add_to_notion(pdf_url, file)
+            log_to_file(f"Waiting 30 seconds before next download...")
+            time.sleep(30)
+    
+    for link in soup.find_all('a'):
+        page_url = urljoin(url, link.get('href'))
+        
+        # Only visit child pages of hellofresh.com domain
+        if 'hellofresh.com' in urlparse(page_url).netloc:
+            get_pdfs_from_url(page_url)
+
+def get_pdfs_from_websites(websites):
+    for website in websites:
+        get_pdfs_from_url(website)
+
+# Replace this list with the websites you want to scan
+websites_to_scan = ["https://www.hellofresh.com/recipes/bowl-recipes", "https://www.hellofresh.com/recipes/stir-fry-recipes" , "https://www.hellofresh.com/recipes/skillet-recipes"]
+get_pdfs_from_websites(websites_to_scan)
